@@ -3,6 +3,9 @@
    - 4 columns of big, bright tiles drift down gently.
    - Tap a tile: it pops, plays a happy piano note, sparkles,
      and the star count goes up.
+   - HOLD a tile: the note keeps ringing until the finger lifts.
+   - Song mode: each tap plays the next note of a nursery tune,
+     and the lowest tile glows to show what to tap next.
    - Forgiving by design: no timing windows, no "game over".
      Missed tiles just float away with no penalty.
    =========================================================== */
@@ -15,8 +18,34 @@
   const FACES = ["🐶", "🐱", "🐰", "🐸", "🐥", "🦄", "🐧", "🐼", "🦊", "🐮", "🐵", "🐠", "⭐", "🌈", "🍓", "🎈"];
   const PRAISE = ["Yay!", "Wow!", "Nice!", "Woohoo!", "Great!", "Cool!", "Yippee!", "Bravo!"];
 
-  // A friendly C-major pentatonic scale (no "wrong"-sounding notes) — toddler-proof.
-  const NOTES = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+  // Note-name -> frequency (Hz), one gentle octave-and-a-bit.
+  const NOTE = {
+    C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, B4: 493.88,
+    C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.0, C6: 1046.5,
+  };
+
+  // Free-play: each column always sounds a friendly C-major pentatonic note
+  // (no "wrong"-sounding notes), so any order sounds nice together.
+  const COLUMN_NOTES = [NOTE.C5, NOTE.D5, NOTE.E5, NOTE.G5];
+
+  // Nursery melodies — each tap plays the next note, looping.
+  const SONGS = {
+    free:    { label: "🎲 Free play", notes: null },
+    twinkle: { label: "⭐ Twinkle", notes: [
+      "C4","C4","G4","G4","A4","A4","G4","F4","F4","E4","E4","D4","D4","C4",
+      "G4","G4","F4","F4","E4","E4","D4","G4","G4","F4","F4","E4","E4","D4",
+      "C4","C4","G4","G4","A4","A4","G4","F4","F4","E4","E4","D4","D4","C4"] },
+    mary:    { label: "🐑 Mary's Lamb", notes: [
+      "E4","D4","C4","D4","E4","E4","E4","D4","D4","D4","E4","G4","G4",
+      "E4","D4","C4","D4","E4","E4","E4","E4","D4","D4","E4","D4","C4"] },
+    row:     { label: "🚣 Row Your Boat", notes: [
+      "C4","C4","C4","D4","E4","E4","D4","E4","F4","G4",
+      "C5","C5","C5","G4","G4","G4","E4","E4","E4","C4","C4","C4",
+      "G4","F4","E4","D4","C4"] },
+    macdonald: { label: "🐄 Old MacDonald", notes: [
+      "G4","G4","G4","D4","E4","E4","D4","B4","B4","A4","A4","G4",
+      "D4","G4","G4","G4","D4","E4","E4","D4","B4","B4","A4","A4","G4"] },
+  };
 
   // Speed in pixels/second and spawn gap (ms) per mode.
   const MODES = {
@@ -36,6 +65,8 @@
 
   // ---- State ----
   let mode = "relaxed";
+  let songKey = "free";
+  let songIndex = 0;
   let score = 0;
   let running = false;
   let soundOn = true;
@@ -44,11 +75,15 @@
   let sinceSpawn = 0;
   let rafId = 0;
   let colWidth = 0, tileH = 0, boardH = 0;
+  let glowTile = null;
 
   // ---------------------------------------------------------
   // Audio (Web Audio API — no asset files needed)
   // ---------------------------------------------------------
   let actx = null;
+  const voices = new Map(); // pointerId -> sustained voice
+  const MAX_SUSTAIN = 8;    // safety: auto-release after 8s if a lift is missed
+
   function audio() {
     if (!actx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -57,20 +92,22 @@
     if (actx && actx.state === "suspended") actx.resume();
     return actx;
   }
-  function playNote(freq) {
+
+  // Start a sustained, bell-like "piano-ish" tone that holds until released.
+  function startVoice(pointerId, freq) {
     if (!soundOn) return;
     const ac = audio();
     if (!ac) return;
+    if (voices.has(pointerId)) stopVoice(pointerId);
     const t = ac.currentTime;
 
-    // Two oscillators for a soft, bell-like "piano-ish" tone.
     const gain = ac.createGain();
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    gain.gain.exponentialRampToValueAtTime(0.45, t + 0.02); // quick attack
+    gain.gain.setTargetAtTime(0.3, t + 0.02, 0.8);          // settle to a gentle sustain
     gain.connect(ac.destination);
 
-    [[freq, "triangle", 0.6], [freq * 2, "sine", 0.25]].forEach(([f, type, vol]) => {
+    const oscs = [[freq, "triangle", 0.6], [freq * 2, "sine", 0.25]].map(([f, type, vol]) => {
       const osc = ac.createOscillator();
       const g = ac.createGain();
       osc.type = type;
@@ -79,9 +116,27 @@
       osc.connect(g);
       g.connect(gain);
       osc.start(t);
-      osc.stop(t + 0.95);
+      return osc;
     });
+
+    const safety = setTimeout(() => stopVoice(pointerId), MAX_SUSTAIN * 1000);
+    voices.set(pointerId, { ac, gain, oscs, safety });
   }
+
+  // Release a held note with a short, soft fade.
+  function stopVoice(pointerId) {
+    const v = voices.get(pointerId);
+    if (!v) return;
+    voices.delete(pointerId);
+    clearTimeout(v.safety);
+    const t = v.ac.currentTime;
+    v.gain.gain.cancelScheduledValues(t);
+    const cur = Math.max(v.gain.gain.value, 0.0001);
+    v.gain.gain.setValueAtTime(cur, t);
+    v.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28); // release
+    v.oscs.forEach((o) => o.stop(t + 0.32));
+  }
+
   function playWhoosh() {
     // gentle, non-scary sound when a tile floats away untapped
     if (!soundOn) return;
@@ -97,6 +152,11 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
     osc.connect(g); g.connect(ac.destination);
     osc.start(t); osc.stop(t + 0.34);
+  }
+
+  // Release every held note (used when leaving the game).
+  function stopAllVoices() {
+    for (const id of Array.from(voices.keys())) stopVoice(id);
   }
 
   // ---------------------------------------------------------
@@ -133,21 +193,34 @@
 
     const face = document.createElement("span");
     face.className = "face";
-    face.textContent = FACES[Math.floor(Math.random() * FACES.length)];
+    face.textContent = songKey === "free"
+      ? FACES[Math.floor(Math.random() * FACES.length)]
+      : "🎵";
     el.appendChild(face);
 
-    const tile = { id: nextId++, el, y: -tileH, col, note: NOTES[col % NOTES.length], dead: false };
-    el.addEventListener("pointerdown", (e) => { e.preventDefault(); hitTile(tile); }, { passive: false });
+    const tile = { id: nextId++, el, y: -tileH, col, dead: false };
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); hitTile(tile, e.pointerId); }, { passive: false });
 
     board.appendChild(el);
     tiles.push(tile);
   }
 
-  function hitTile(tile) {
+  // Decide which note a tapped tile should sound.
+  function noteFor(tile) {
+    if (songKey === "free") return COLUMN_NOTES[tile.col % COLUMN_NOTES.length];
+    const seq = SONGS[songKey].notes;
+    const name = seq[songIndex % seq.length];
+    songIndex++;
+    return NOTE[name];
+  }
+
+  function hitTile(tile, pointerId) {
     if (tile.dead) return;
     tile.dead = true;
+    if (tile === glowTile) glowTile = null;
+    tile.el.classList.remove("glow");
     tile.el.classList.add("tapped");
-    playNote(tile.note);
+    startVoice(pointerId, noteFor(tile));
     burst(tile);
     addScore();
     setTimeout(() => tile.el.remove(), 340);
@@ -191,6 +264,20 @@
     praiseEl.classList.add("show");
   }
 
+  // In song mode, glow the lowest tile so toddlers know what to tap next.
+  function updateGlow() {
+    if (songKey === "free") return;
+    let lowest = null;
+    for (const t of tiles) {
+      if (t.dead) continue;
+      if (!lowest || t.y > lowest.y) lowest = t;
+    }
+    if (lowest === glowTile) return;
+    if (glowTile) glowTile.el.classList.remove("glow");
+    glowTile = lowest;
+    if (glowTile) glowTile.el.classList.add("glow");
+  }
+
   // ---------------------------------------------------------
   // Main loop
   // ---------------------------------------------------------
@@ -210,11 +297,13 @@
       if (tile.y > boardH) {
         // floated past the bottom untapped — no penalty, just drift away
         tile.dead = true;
+        if (tile === glowTile) glowTile = null;
         tile.el.remove();
         playWhoosh();
       }
     }
     tiles = tiles.filter((t) => !t.dead);
+    updateGlow();
 
     sinceSpawn += dt * 1000;
     if (sinceSpawn >= cfg.gap) {
@@ -232,6 +321,8 @@
     audio(); // unlock audio on the user gesture
     score = 0;
     scoreNum.textContent = "0";
+    songIndex = 0;
+    glowTile = null;
     tiles.forEach((t) => t.el.remove());
     tiles = [];
     nextId = 1;
@@ -249,8 +340,10 @@
   function goHome() {
     running = false;
     cancelAnimationFrame(rafId);
+    stopAllVoices();
     tiles.forEach((t) => t.el.remove());
     tiles = [];
+    glowTile = null;
     gameScreen.classList.add("hidden");
     startScreen.classList.remove("hidden");
   }
@@ -269,11 +362,24 @@
     });
   });
 
+  document.querySelectorAll(".song-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".song-btn").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      songKey = btn.dataset.song;
+    });
+  });
+
   soundBtn.addEventListener("click", () => {
     soundOn = !soundOn;
     soundBtn.textContent = soundOn ? "🔊" : "🔇";
-    if (soundOn) audio();
+    if (!soundOn) stopAllVoices();
+    else audio();
   });
+
+  // Release a held note as soon as the finger/mouse lifts — anywhere on screen.
+  window.addEventListener("pointerup", (e) => stopVoice(e.pointerId));
+  window.addEventListener("pointercancel", (e) => stopVoice(e.pointerId));
 
   // Keep little fingers from accidentally scrolling / zooming the page.
   document.addEventListener("gesturestart", (e) => e.preventDefault());

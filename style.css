@@ -91,6 +91,41 @@ html, body {
   box-shadow: 0 6px 14px rgba(0,0,0,.15);
 }
 
+.pick-label {
+  margin-top: 30px;
+  color: #b14d8e;
+  font-size: clamp(.95rem, 4vw, 1.2rem);
+  font-weight: bold;
+  letter-spacing: .5px;
+}
+.song-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+  max-width: 560px;
+  padding: 0 12px;
+}
+.song-btn {
+  padding: 10px 18px;
+  border: 3px solid #fff;
+  border-radius: 999px;
+  background: rgba(255,255,255,.55);
+  color: #b14d8e;
+  font-size: clamp(.85rem, 3.6vw, 1.1rem);
+  font-weight: bold;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform .1s ease, background .15s ease;
+}
+.song-btn.is-active {
+  background: #fff;
+  color: #d6336c;
+  transform: scale(1.06);
+  box-shadow: 0 5px 12px rgba(0,0,0,.15);
+}
+
 .hint {
   position: absolute;
   bottom: 5vh;
@@ -183,6 +218,13 @@ html, body {
   pointer-events: none;
 }
 
+/* In song mode, the next tile to tap glows to guide little players. */
+.tile.glow {
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 8px 18px rgba(0,0,0,.18),
+              0 0 0 6px rgba(255,255,255,.95), 0 0 30px 10px rgba(255,255,255,.75);
+  animation: tileGlow 1s ease-in-out infinite;
+}
+
 /* burst particles */
 .spark {
   position: absolute;
@@ -222,6 +264,7 @@ html, body {
   0%   { transform: translate(0,0) scale(.4) rotate(0); opacity: 1; }
   100% { transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(var(--rot)); opacity: 0; }
 }
+@keyframes tileGlow { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.22); } }
 @keyframes praisePop {
   0%   { opacity: 0; transform: translate(-50%,-50%) scale(.4) rotate(-8deg); }
   25%  { opacity: 1; transform: translate(-50%,-50%) scale(1.15) rotate(4deg); }
