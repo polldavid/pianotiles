@@ -81,8 +81,9 @@
   // Audio (Web Audio API — no asset files needed)
   // ---------------------------------------------------------
   let actx = null;
-  const voices = new Map(); // pointerId -> sustained voice
-  const MAX_SUSTAIN = 8;    // safety: auto-release after 8s if a lift is missed
+  const voices = new Map();     // pointerId -> sustained voice
+  const heldTiles = new Map();  // pointerId -> long tile currently being held
+  const MAX_SUSTAIN = 8;        // safety: auto-release after 8s if a lift is missed
 
   function audio() {
     if (!actx) {
@@ -182,14 +183,19 @@
     if (col === lastCol) col = (col + 1 + Math.floor(Math.random() * (COLS - 1))) % COLS;
     lastCol = col;
 
+    // Every so often spawn a LONG tile: taller, meant to be pressed and held
+    // as it slides by (like the hold notes in classic Piano Tiles).
+    const long = Math.random() < 0.32;
+    const h = long ? tileH * 2.1 : tileH;
+
     const idx = (nextId - 1) % COLORS.length;
     const el = document.createElement("div");
-    el.className = "tile";
+    el.className = long ? "tile long" : "tile";
     el.style.width = (colWidth - 14) + "px";
-    el.style.height = tileH + "px";
+    el.style.height = h + "px";
     el.style.left = (col * colWidth + 7) + "px";
     el.style.background = COLORS[idx];
-    el.style.transform = `translateY(${-tileH}px)`;
+    el.style.transform = `translateY(${-h}px)`;
 
     const face = document.createElement("span");
     face.className = "face";
@@ -198,8 +204,16 @@
       : "🎵";
     el.appendChild(face);
 
-    const tile = { id: nextId++, el, y: -tileH, col, dead: false };
-    el.addEventListener("pointerdown", (e) => { e.preventDefault(); hitTile(tile, e.pointerId); }, { passive: false });
+    if (long) {
+      // a little "hold me" grip hint running down the tile
+      const grip = document.createElement("span");
+      grip.className = "grip";
+      grip.textContent = "⋮";
+      el.appendChild(grip);
+    }
+
+    const tile = { id: nextId++, el, y: -h, h, col, long, dead: false, heldBy: null, holdTimer: 0 };
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); onPress(tile, e.pointerId); }, { passive: false });
 
     board.appendChild(el);
     tiles.push(tile);
@@ -214,30 +228,65 @@
     return NOTE[name];
   }
 
-  function hitTile(tile, pointerId) {
+  function onPress(tile, pointerId) {
     if (tile.dead) return;
+    startVoice(pointerId, noteFor(tile));
+    addScore();
+
+    if (tile.long) {
+      // Don't pop yet — keep it on screen and sounding while the finger holds.
+      tile.heldBy = pointerId;
+      heldTiles.set(pointerId, tile);
+      tile.el.classList.remove("glow");
+      tile.el.classList.add("held");
+      // reward holding: a happy sparkle + extra star every so often
+      tile.holdTimer = setInterval(() => {
+        if (tile.dead) return;
+        addScore();
+        sparkleOn(tile);
+      }, 600);
+      return;
+    }
+
+    // Short tile: instant pop. The note still rings until the finger lifts.
     tile.dead = true;
     if (tile === glowTile) glowTile = null;
     tile.el.classList.remove("glow");
     tile.el.classList.add("tapped");
-    startVoice(pointerId, noteFor(tile));
     burst(tile);
-    addScore();
     setTimeout(() => tile.el.remove(), 340);
   }
 
-  function burst(tile) {
-    const r = tile.el.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    const bits = ["✨", "⭐", "🌟", "💫", "🎉"];
-    const n = 6;
+  // Finger/mouse lifted: release the note and pop any long tile it was holding.
+  function onRelease(pointerId) {
+    stopVoice(pointerId);
+    const tile = heldTiles.get(pointerId);
+    if (tile) {
+      heldTiles.delete(pointerId);
+      releaseLong(tile);
+    }
+  }
+
+  function releaseLong(tile) {
+    if (tile.dead) return;
+    tile.dead = true;
+    tile.heldBy = null;
+    clearInterval(tile.holdTimer);
+    if (tile === glowTile) glowTile = null;
+    tile.el.classList.remove("held", "glow");
+    tile.el.classList.add("tapped");
+    burst(tile);
+    setTimeout(() => tile.el.remove(), 340);
+  }
+
+  const SPARK_BITS = ["✨", "⭐", "🌟", "💫", "🎉"];
+  function sparkleAt(cx, cy, n, spread) {
     for (let i = 0; i < n; i++) {
       const s = document.createElement("div");
       s.className = "spark";
-      s.textContent = bits[Math.floor(Math.random() * bits.length)];
+      s.textContent = SPARK_BITS[Math.floor(Math.random() * SPARK_BITS.length)];
       const ang = (Math.PI * 2 * i) / n + Math.random();
-      const dist = 70 + Math.random() * 50;
+      const dist = spread + Math.random() * 50;
       s.style.left = cx + "px";
       s.style.top = cy + "px";
       s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
@@ -246,6 +295,17 @@
       document.body.appendChild(s);
       setTimeout(() => s.remove(), 720);
     }
+  }
+
+  function burst(tile) {
+    const r = tile.el.getBoundingClientRect();
+    sparkleAt(r.left + r.width / 2, r.top + r.height / 2, 6, 70);
+  }
+
+  // A small puff while a long tile is being held.
+  function sparkleOn(tile) {
+    const r = tile.el.getBoundingClientRect();
+    sparkleAt(r.left + r.width / 2, r.top + r.height * 0.3, 3, 40);
   }
 
   function addScore() {
@@ -295,11 +355,17 @@
       tile.y += dy;
       tile.el.style.transform = `translateY(${tile.y}px)`;
       if (tile.y > boardH) {
-        // floated past the bottom untapped — no penalty, just drift away
-        tile.dead = true;
-        if (tile === glowTile) glowTile = null;
-        tile.el.remove();
-        playWhoosh();
+        // reached the bottom
+        if (tile.heldBy !== null) {
+          // a held long tile rode all the way down — finish it with a pop
+          onRelease(tile.heldBy);
+        } else {
+          // untapped — no penalty, just drift away
+          tile.dead = true;
+          if (tile === glowTile) glowTile = null;
+          tile.el.remove();
+          playWhoosh();
+        }
       }
     }
     tiles = tiles.filter((t) => !t.dead);
@@ -323,7 +389,8 @@
     scoreNum.textContent = "0";
     songIndex = 0;
     glowTile = null;
-    tiles.forEach((t) => t.el.remove());
+    tiles.forEach((t) => { clearInterval(t.holdTimer); t.el.remove(); });
+    heldTiles.clear();
     tiles = [];
     nextId = 1;
     lastCol = -1;
@@ -341,7 +408,8 @@
     running = false;
     cancelAnimationFrame(rafId);
     stopAllVoices();
-    tiles.forEach((t) => t.el.remove());
+    tiles.forEach((t) => { clearInterval(t.holdTimer); t.el.remove(); });
+    heldTiles.clear();
     tiles = [];
     glowTile = null;
     gameScreen.classList.add("hidden");
@@ -377,9 +445,10 @@
     else audio();
   });
 
-  // Release a held note as soon as the finger/mouse lifts — anywhere on screen.
-  window.addEventListener("pointerup", (e) => stopVoice(e.pointerId));
-  window.addEventListener("pointercancel", (e) => stopVoice(e.pointerId));
+  // Release a held note (and pop any held long tile) as soon as the
+  // finger/mouse lifts — anywhere on screen.
+  window.addEventListener("pointerup", (e) => onRelease(e.pointerId));
+  window.addEventListener("pointercancel", (e) => onRelease(e.pointerId));
 
   // Keep little fingers from accidentally scrolling / zooming the page.
   document.addEventListener("gesturestart", (e) => e.preventDefault());

@@ -218,6 +218,29 @@ html, body {
   pointer-events: none;
 }
 
+/* ===== Long (press-and-hold) tiles ===== */
+.tile.long {
+  /* a soft vertical sheen + dashed "track" so it reads as a hold tile */
+  background-image: linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,0) 40%);
+  border: 3px dashed rgba(255,255,255,.85);
+}
+.tile.long .grip {
+  position: absolute;
+  bottom: 6%;
+  font-size: 1.6rem;
+  line-height: .5;
+  letter-spacing: 4px;
+  color: rgba(255,255,255,.9);
+  pointer-events: none;
+  writing-mode: vertical-rl;
+  animation: gripPulse 1.1s ease-in-out infinite;
+}
+.tile.long.held {
+  filter: brightness(1.18);
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 8px 18px rgba(0,0,0,.18),
+              0 0 0 6px rgba(255,255,255,.95), 0 0 34px 12px rgba(255,255,255,.8);
+}
+
 /* In song mode, the next tile to tap glows to guide little players. */
 .tile.glow {
   box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 8px 18px rgba(0,0,0,.18),
@@ -265,6 +288,7 @@ html, body {
   100% { transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(var(--rot)); opacity: 0; }
 }
 @keyframes tileGlow { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.22); } }
+@keyframes gripPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 @keyframes praisePop {
   0%   { opacity: 0; transform: translate(-50%,-50%) scale(.4) rotate(-8deg); }
   25%  { opacity: 1; transform: translate(-50%,-50%) scale(1.15) rotate(4deg); }
