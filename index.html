@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#fde68a" />
+  <title>Tippy Tiles — Piano Tiles for Toddlers</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===== Start screen ===== -->
+  <div id="start" class="screen">
+    <div class="title-wrap">
+      <h1 class="title">🎹 Tippy Tiles</h1>
+      <p class="subtitle">Tap the happy tiles!</p>
+    </div>
+    <button id="playBtn" class="big-btn" aria-label="Play">
+      <span class="big-btn-icon">▶</span>
+      <span class="big-btn-text">Play</span>
+    </button>
+    <div class="mode-row" role="group" aria-label="Choose a mode">
+      <button class="mode-btn is-active" data-mode="relaxed">🐢 Easy</button>
+      <button class="mode-btn" data-mode="normal">🐰 Faster</button>
+    </div>
+    <p class="hint">No losing — just tap and play! 🌈</p>
+  </div>
+
+  <!-- ===== Game screen ===== -->
+  <div id="game" class="screen hidden">
+    <div id="hud">
+      <button id="homeBtn" class="hud-btn" aria-label="Home">🏠</button>
+      <div id="score" class="score" aria-live="polite">
+        <span class="star">⭐</span><span id="scoreNum">0</span>
+      </div>
+      <button id="soundBtn" class="hud-btn" aria-label="Sound on or off">🔊</button>
+    </div>
+    <div id="board" aria-label="Piano tiles"></div>
+    <div id="praise" class="praise" aria-hidden="true"></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
