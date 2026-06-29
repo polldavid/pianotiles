@@ -1,0 +1,328 @@
+<title>Tippy Tiles — Piano Tiles for Toddlers</title>
+<meta name="description" content="A gentle, no-fail Piano Tiles game for little kids — tap bright tiles for happy piano notes and stars." />
+<style>
+/* ===== Tippy Tiles — toddler piano tiles ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --c1: #ff6b9d; --c2: #ffa552; --c3: #ffe066;
+  --c4: #6be585; --c5: #5ec8ff; --c6: #b388ff;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Trebuchet MS", "Comic Sans MS", "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(160deg, #fef3c7 0%, #fde68a 40%, #fbcfe8 100%);
+}
+
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hidden { display: none !important; }
+
+/* ===== Start screen ===== */
+.title-wrap { text-align: center; margin-bottom: 8vh; padding: 0 16px; max-width: 100%; }
+.title {
+  font-size: clamp(2.4rem, 11vw, 4.4rem);
+  color: #fff;
+  text-shadow: 0 4px 0 #ff6b9d, 0 8px 16px rgba(0,0,0,.18);
+  letter-spacing: 1px;
+  animation: bob 2.4s ease-in-out infinite;
+}
+.subtitle { margin-top: 12px; font-size: clamp(1.1rem, 5vw, 1.8rem); color: #d6336c; font-weight: bold; }
+
+.big-btn {
+  display: flex; align-items: center; gap: 14px;
+  padding: 26px 56px; border: none; border-radius: 999px;
+  background: linear-gradient(180deg, #6be585, #34c759);
+  color: #fff; font-size: clamp(1.6rem, 7vw, 2.6rem); font-weight: bold; font-family: inherit;
+  box-shadow: 0 10px 0 #28a347, 0 16px 26px rgba(0,0,0,.22);
+  cursor: pointer; transition: transform .08s ease, box-shadow .08s ease;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+.big-btn:active { transform: translateY(7px); box-shadow: 0 3px 0 #28a347, 0 6px 12px rgba(0,0,0,.22); animation: none; }
+.big-btn-icon { font-size: 1.2em; }
+
+.mode-row { display: flex; gap: 16px; margin-top: 38px; }
+.mode-btn {
+  padding: 14px 26px; border: 4px solid #fff; border-radius: 999px;
+  background: rgba(255,255,255,.55); color: #b14d8e;
+  font-size: clamp(1rem, 4.5vw, 1.4rem); font-weight: bold; font-family: inherit;
+  cursor: pointer; transition: transform .1s ease, background .15s ease;
+}
+.mode-btn.is-active { background: #fff; color: #d6336c; transform: scale(1.06); box-shadow: 0 6px 14px rgba(0,0,0,.15); }
+
+.hint { position: absolute; bottom: 5vh; color: #b14d8e; font-size: clamp(.95rem, 4vw, 1.3rem); font-weight: bold; opacity: .85; }
+
+/* ===== Game screen ===== */
+#game { background: linear-gradient(160deg, #fff7ed 0%, #fee2e2 100%); }
+
+#hud {
+  position: absolute; top: 0; left: 0; right: 0; height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; padding-top: env(safe-area-inset-top, 0);
+  z-index: 30; pointer-events: none;
+}
+.hud-btn {
+  pointer-events: auto; width: 52px; height: 52px; border: none; border-radius: 50%;
+  background: rgba(255,255,255,.85); font-size: 1.6rem; cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,.12); display: flex; align-items: center; justify-content: center;
+}
+.hud-btn:active { transform: scale(.92); }
+
+.score {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.85); padding: 6px 20px; border-radius: 999px;
+  font-size: 1.8rem; font-weight: bold; color: #f59e0b;
+  box-shadow: 0 4px 10px rgba(0,0,0,.12); min-width: 90px; justify-content: center;
+}
+.score.pop { animation: scorePop .3s ease; }
+.score .star { font-size: 1.4rem; }
+
+/* ===== Board & tiles ===== */
+#board { position: absolute; inset: 0; overflow: hidden; }
+#board::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(to right,
+    transparent 0, transparent calc(25% - 2px),
+    rgba(0,0,0,.05) calc(25% - 2px), rgba(0,0,0,.05) 25%);
+}
+
+.tile {
+  position: absolute; border-radius: 22px;
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 8px 18px rgba(0,0,0,.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12vw; will-change: transform; cursor: pointer;
+}
+.tile .face { pointer-events: none; filter: drop-shadow(0 2px 0 rgba(0,0,0,.12)); }
+.tile.tapped { animation: tilePop .32s ease forwards; pointer-events: none; }
+
+.spark { position: absolute; font-size: 2rem; pointer-events: none; z-index: 20; animation: sparkFly .7s ease-out forwards; }
+
+.praise {
+  position: absolute; top: 42%; left: 50%;
+  transform: translate(-50%, -50%) scale(.4);
+  font-size: clamp(2.4rem, 13vw, 6rem); font-weight: bold; color: #fff;
+  text-shadow: 0 4px 0 #ff6b9d, 0 8px 18px rgba(0,0,0,.25);
+  opacity: 0; pointer-events: none; z-index: 25; white-space: nowrap;
+}
+.praise.show { animation: praisePop 1s ease forwards; }
+
+/* ===== Keyframes ===== */
+@keyframes bob   { 0%,100% { transform: translateY(0) rotate(-2deg);} 50% { transform: translateY(-12px) rotate(2deg);} }
+@keyframes pulse { 0%,100% { transform: scale(1);} 50% { transform: scale(1.05);} }
+@keyframes scorePop { 0% { transform: scale(1);} 40% { transform: scale(1.35);} 100% { transform: scale(1);} }
+@keyframes tilePop { 0% { transform: scale(1);} 35% { transform: scale(1.18); filter: brightness(1.4);} 100% { transform: scale(.2); opacity: 0;} }
+@keyframes sparkFly { 0% { transform: translate(0,0) scale(.4) rotate(0); opacity: 1;} 100% { transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(var(--rot)); opacity: 0;} }
+@keyframes praisePop {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(.4) rotate(-8deg);}
+  25% { opacity: 1; transform: translate(-50%,-50%) scale(1.15) rotate(4deg);}
+  70% { opacity: 1; transform: translate(-50%,-50%) scale(1) rotate(0);}
+  100% { opacity: 0; transform: translate(-50%,-60%) scale(1);}
+}
+@media (prefers-reduced-motion: reduce) { .title, .big-btn { animation: none; } }
+</style>
+
+<!-- ===== Start screen ===== -->
+<div id="start" class="screen">
+  <div class="title-wrap">
+    <h1 class="title">🎹 Tippy Tiles</h1>
+    <p class="subtitle">Tap the happy tiles!</p>
+  </div>
+  <button id="playBtn" class="big-btn" aria-label="Play">
+    <span class="big-btn-icon">▶</span>
+    <span class="big-btn-text">Play</span>
+  </button>
+  <div class="mode-row" role="group" aria-label="Choose a mode">
+    <button class="mode-btn is-active" data-mode="relaxed">🐢 Easy</button>
+    <button class="mode-btn" data-mode="normal">🐰 Faster</button>
+  </div>
+  <p class="hint">No losing — just tap and play! 🌈</p>
+</div>
+
+<!-- ===== Game screen ===== -->
+<div id="game" class="screen hidden">
+  <div id="hud">
+    <button id="homeBtn" class="hud-btn" aria-label="Home">🏠</button>
+    <div id="score" class="score" aria-live="polite"><span class="star">⭐</span><span id="scoreNum">0</span></div>
+    <button id="soundBtn" class="hud-btn" aria-label="Sound on or off">🔊</button>
+  </div>
+  <div id="board" aria-label="Piano tiles"></div>
+  <div id="praise" class="praise" aria-hidden="true"></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const COLS = 4;
+  const COLORS = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)"];
+  const FACES = ["🐶", "🐱", "🐰", "🐸", "🐥", "🦄", "🐧", "🐼", "🦊", "🐮", "🐵", "🐠", "⭐", "🌈", "🍓", "🎈"];
+  const PRAISE = ["Yay!", "Wow!", "Nice!", "Woohoo!", "Great!", "Cool!", "Yippee!", "Bravo!"];
+  const NOTES = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+  const MODES = { relaxed: { speed: 95, gap: 1150 }, normal: { speed: 165, gap: 820 } };
+
+  const $ = (id) => document.getElementById(id);
+  const startScreen = $("start"), gameScreen = $("game"), board = $("board");
+  const scoreEl = $("score"), scoreNum = $("scoreNum"), praiseEl = $("praise"), soundBtn = $("soundBtn");
+
+  let mode = "relaxed", score = 0, running = false, soundOn = true;
+  let tiles = [], lastTime = 0, sinceSpawn = 0, rafId = 0;
+  let colWidth = 0, tileH = 0, boardH = 0;
+
+  let actx = null;
+  function audio() {
+    if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+    if (actx && actx.state === "suspended") actx.resume();
+    return actx;
+  }
+  function playNote(freq) {
+    if (!soundOn) return;
+    const ac = audio(); if (!ac) return;
+    const t = ac.currentTime;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    gain.connect(ac.destination);
+    [[freq, "triangle", 0.6], [freq * 2, "sine", 0.25]].forEach(([f, type, vol]) => {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.type = type; osc.frequency.value = f; g.gain.value = vol;
+      osc.connect(g); g.connect(gain); osc.start(t); osc.stop(t + 0.95);
+    });
+  }
+  function playWhoosh() {
+    if (!soundOn) return;
+    const ac = audio(); if (!ac) return;
+    const t = ac.currentTime;
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(330, t);
+    osc.frequency.exponentialRampToValueAtTime(180, t + 0.3);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    osc.connect(g); g.connect(ac.destination); osc.start(t); osc.stop(t + 0.34);
+  }
+
+  function measure() {
+    const r = board.getBoundingClientRect();
+    boardH = r.height; colWidth = r.width / COLS;
+    tileH = Math.min(colWidth * 1.15, boardH * 0.26);
+  }
+  window.addEventListener("resize", () => { if (running) measure(); });
+
+  let nextId = 1, lastCol = -1;
+  function spawnTile() {
+    let col = Math.floor(Math.random() * COLS);
+    if (col === lastCol) col = (col + 1 + Math.floor(Math.random() * (COLS - 1))) % COLS;
+    lastCol = col;
+    const idx = (nextId - 1) % COLORS.length;
+    const el = document.createElement("div");
+    el.className = "tile";
+    el.style.width = (colWidth - 14) + "px";
+    el.style.height = tileH + "px";
+    el.style.left = (col * colWidth + 7) + "px";
+    el.style.background = COLORS[idx];
+    el.style.transform = `translateY(${-tileH}px)`;
+    const face = document.createElement("span");
+    face.className = "face";
+    face.textContent = FACES[Math.floor(Math.random() * FACES.length)];
+    el.appendChild(face);
+    const tile = { id: nextId++, el, y: -tileH, col, note: NOTES[col % NOTES.length], dead: false };
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); hitTile(tile); }, { passive: false });
+    board.appendChild(el); tiles.push(tile);
+  }
+
+  function hitTile(tile) {
+    if (tile.dead) return;
+    tile.dead = true;
+    tile.el.classList.add("tapped");
+    playNote(tile.note); burst(tile); addScore();
+    setTimeout(() => tile.el.remove(), 340);
+  }
+
+  function burst(tile) {
+    const r = tile.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const bits = ["✨", "⭐", "🌟", "💫", "🎉"], n = 6;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement("div");
+      s.className = "spark";
+      s.textContent = bits[Math.floor(Math.random() * bits.length)];
+      const ang = (Math.PI * 2 * i) / n + Math.random();
+      const dist = 70 + Math.random() * 50;
+      s.style.left = cx + "px"; s.style.top = cy + "px";
+      s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
+      s.style.setProperty("--dy", Math.sin(ang) * dist + "px");
+      s.style.setProperty("--rot", (Math.random() * 360 - 180) + "deg");
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 720);
+    }
+  }
+
+  function addScore() {
+    score++; scoreNum.textContent = score;
+    scoreEl.classList.remove("pop"); void scoreEl.offsetWidth; scoreEl.classList.add("pop");
+    if (score % 10 === 0) showPraise();
+  }
+  function showPraise() {
+    praiseEl.textContent = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+    praiseEl.classList.remove("show"); void praiseEl.offsetWidth; praiseEl.classList.add("show");
+  }
+
+  function loop(now) {
+    if (!running) return;
+    if (!lastTime) lastTime = now;
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    const cfg = MODES[mode], dy = cfg.speed * dt;
+    for (const tile of tiles) {
+      if (tile.dead) continue;
+      tile.y += dy;
+      tile.el.style.transform = `translateY(${tile.y}px)`;
+      if (tile.y > boardH) { tile.dead = true; tile.el.remove(); playWhoosh(); }
+    }
+    tiles = tiles.filter((t) => !t.dead);
+    sinceSpawn += dt * 1000;
+    if (sinceSpawn >= cfg.gap) { sinceSpawn = 0; spawnTile(); }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function startGame() {
+    audio();
+    score = 0; scoreNum.textContent = "0";
+    tiles.forEach((t) => t.el.remove()); tiles = [];
+    nextId = 1; lastCol = -1; lastTime = 0; sinceSpawn = 9999; running = true;
+    startScreen.classList.add("hidden");
+    gameScreen.classList.remove("hidden");
+    measure();
+    rafId = requestAnimationFrame(loop);
+  }
+  function goHome() {
+    running = false; cancelAnimationFrame(rafId);
+    tiles.forEach((t) => t.el.remove()); tiles = [];
+    gameScreen.classList.add("hidden");
+    startScreen.classList.remove("hidden");
+  }
+
+  $("playBtn").addEventListener("click", startGame);
+  $("homeBtn").addEventListener("click", goHome);
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      mode = btn.dataset.mode;
+    });
+  });
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? "🔊" : "🔇";
+    if (soundOn) audio();
+  });
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+  document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+})();
+</script>
