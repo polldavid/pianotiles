@@ -240,6 +240,18 @@ html, body {
   box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 8px 18px rgba(0,0,0,.18),
               0 0 0 6px rgba(255,255,255,.95), 0 0 34px 12px rgba(255,255,255,.8);
 }
+/* the rising progress fill (grows bottom -> top while held) */
+.tile.long .fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 0%;
+  border-radius: 0 0 19px 19px;
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.85));
+  box-shadow: 0 -3px 12px rgba(255,255,255,.95);
+  pointer-events: none;
+}
+/* completion flash */
+.tile.long.done { animation: tileDone .4s ease forwards; pointer-events: none; }
 
 /* In song mode, the next tile to tap glows to guide little players. */
 .tile.glow {
@@ -289,6 +301,11 @@ html, body {
 }
 @keyframes tileGlow { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.22); } }
 @keyframes gripPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes tileDone {
+  0%   { transform: scale(1); filter: brightness(1.5); }
+  40%  { transform: scale(1.12); filter: brightness(1.8); }
+  100% { transform: scale(.2); opacity: 0; }
+}
 @keyframes praisePop {
   0%   { opacity: 0; transform: translate(-50%,-50%) scale(.4) rotate(-8deg); }
   25%  { opacity: 1; transform: translate(-50%,-50%) scale(1.15) rotate(4deg); }

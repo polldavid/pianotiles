@@ -53,6 +53,9 @@
     normal:  { speed: 165, gap: 820  },
   };
 
+  // How long (seconds) a long tile must be held for its fill to complete.
+  const HOLD_TIME = 1.2;
+
   // ---- DOM ----
   const $ = (id) => document.getElementById(id);
   const startScreen = $("start");
@@ -204,7 +207,12 @@
       : "🎵";
     el.appendChild(face);
 
+    let fill = null;
     if (long) {
+      // a rising "fill" that shows how much of the hold is done
+      fill = document.createElement("div");
+      fill.className = "fill";
+      el.appendChild(fill);
       // a little "hold me" grip hint running down the tile
       const grip = document.createElement("span");
       grip.className = "grip";
@@ -212,7 +220,7 @@
       el.appendChild(grip);
     }
 
-    const tile = { id: nextId++, el, y: -h, h, col, long, dead: false, heldBy: null, holdTimer: 0 };
+    const tile = { id: nextId++, el, y: -h, h, col, long, fill, progress: 0, dead: false, heldBy: null };
     el.addEventListener("pointerdown", (e) => { e.preventDefault(); onPress(tile, e.pointerId); }, { passive: false });
 
     board.appendChild(el);
@@ -235,16 +243,11 @@
 
     if (tile.long) {
       // Don't pop yet — keep it on screen and sounding while the finger holds.
+      // A fill rises until it's full; completing it is the little "win".
       tile.heldBy = pointerId;
       heldTiles.set(pointerId, tile);
       tile.el.classList.remove("glow");
       tile.el.classList.add("held");
-      // reward holding: a happy sparkle + extra star every so often
-      tile.holdTimer = setInterval(() => {
-        if (tile.dead) return;
-        addScore();
-        sparkleOn(tile);
-      }, 600);
       return;
     }
 
@@ -267,16 +270,52 @@
     }
   }
 
+  // Let go before the fill was full — no penalty, just a gentle pop.
   function releaseLong(tile) {
     if (tile.dead) return;
     tile.dead = true;
     tile.heldBy = null;
-    clearInterval(tile.holdTimer);
     if (tile === glowTile) glowTile = null;
     tile.el.classList.remove("held", "glow");
     tile.el.classList.add("tapped");
     burst(tile);
     setTimeout(() => tile.el.remove(), 340);
+  }
+
+  // The fill reached the top — the hold is complete! Celebrate.
+  function completeLong(tile) {
+    if (tile.dead) return;
+    tile.dead = true;
+    const pid = tile.heldBy;
+    tile.heldBy = null;
+    if (pid !== null) { heldTiles.delete(pid); stopVoice(pid); }
+    if (tile === glowTile) glowTile = null;
+    if (tile.fill) tile.fill.style.height = "100%";
+    tile.el.classList.remove("held", "glow");
+    tile.el.classList.add("done");
+    addScore(); addScore();      // a couple of bonus stars for finishing
+    chime();
+    // a bigger sparkle shower for completing the whole tile
+    const r = tile.el.getBoundingClientRect();
+    sparkleAt(r.left + r.width / 2, r.top + r.height / 2, 10, 80);
+    setTimeout(() => tile.el.remove(), 380);
+  }
+
+  // a bright little "ding" when a long tile is completed
+  function chime() {
+    if (!soundOn) return;
+    const ac = audio();
+    if (!ac) return;
+    const t = ac.currentTime;
+    [NOTE.C6, NOTE.E5].forEach((f, i) => {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.type = "sine"; osc.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + i * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.35, t + i * 0.05 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.05 + 0.5);
+      osc.connect(g); g.connect(ac.destination);
+      osc.start(t + i * 0.05); osc.stop(t + i * 0.05 + 0.55);
+    });
   }
 
   const SPARK_BITS = ["✨", "⭐", "🌟", "💫", "🎉"];
@@ -300,12 +339,6 @@
   function burst(tile) {
     const r = tile.el.getBoundingClientRect();
     sparkleAt(r.left + r.width / 2, r.top + r.height / 2, 6, 70);
-  }
-
-  // A small puff while a long tile is being held.
-  function sparkleOn(tile) {
-    const r = tile.el.getBoundingClientRect();
-    sparkleAt(r.left + r.width / 2, r.top + r.height * 0.3, 3, 40);
   }
 
   function addScore() {
@@ -352,13 +385,21 @@
 
     for (const tile of tiles) {
       if (tile.dead) continue;
+
+      // A long tile being held fills up; when full, it's complete.
+      if (tile.heldBy !== null) {
+        tile.progress = Math.min(1, tile.progress + dt / HOLD_TIME);
+        if (tile.fill) tile.fill.style.height = (tile.progress * 100) + "%";
+        if (tile.progress >= 1) { completeLong(tile); continue; }
+      }
+
       tile.y += dy;
       tile.el.style.transform = `translateY(${tile.y}px)`;
       if (tile.y > boardH) {
         // reached the bottom
         if (tile.heldBy !== null) {
-          // a held long tile rode all the way down — finish it with a pop
-          onRelease(tile.heldBy);
+          // held all the way down — count it as complete and celebrate
+          completeLong(tile);
         } else {
           // untapped — no penalty, just drift away
           tile.dead = true;
@@ -389,7 +430,7 @@
     scoreNum.textContent = "0";
     songIndex = 0;
     glowTile = null;
-    tiles.forEach((t) => { clearInterval(t.holdTimer); t.el.remove(); });
+    tiles.forEach((t) => t.el.remove());
     heldTiles.clear();
     tiles = [];
     nextId = 1;
@@ -408,7 +449,7 @@
     running = false;
     cancelAnimationFrame(rafId);
     stopAllVoices();
-    tiles.forEach((t) => { clearInterval(t.holdTimer); t.el.remove(); });
+    tiles.forEach((t) => t.el.remove());
     heldTiles.clear();
     tiles = [];
     glowTile = null;
